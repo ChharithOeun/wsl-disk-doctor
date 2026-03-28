@@ -157,6 +157,27 @@ Write-Host "      Goal:   $TargetGB GB ($([int]$TargetGB * 1024) MB)"
 Write-Host ""
 
 # --------------------------------------------------------------------------
+# Security: validate distro name and VHDX path before use
+# Prevents command/path injection if registry contains unexpected values
+# --------------------------------------------------------------------------
+if ($sel.Name -notmatch '^[a-zA-Z0-9._-]+$') {
+    Write-Host "[ERROR] Distro name contains invalid characters: '$($sel.Name)'" -ForegroundColor Red
+    Write-Host "        Expected: letters, digits, dash, dot, underscore only."
+    Read-Host "Press Enter to exit"
+    exit 1
+}
+if ($sel.VHDX -and -not $sel.VHDX.EndsWith('.vhdx')) {
+    Write-Host "[ERROR] VHDX path does not end with .vhdx: '$($sel.VHDX)'" -ForegroundColor Red
+    Read-Host "Press Enter to exit"
+    exit 1
+}
+if ($TargetGB -lt 5 -or $TargetGB -gt 2000) {
+    Write-Host "[ERROR] TargetGB must be between 5 and 2000. Got: $TargetGB" -ForegroundColor Red
+    Read-Host "Press Enter to exit"
+    exit 1
+}
+
+# --------------------------------------------------------------------------
 # Step 3: Update WSL to get wsl --manage support (WSL 2.5+)
 # --------------------------------------------------------------------------
 Write-Host "[3/5] Updating WSL to ensure wsl --manage is available..." -ForegroundColor Yellow

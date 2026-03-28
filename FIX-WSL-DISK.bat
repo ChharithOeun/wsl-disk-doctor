@@ -111,6 +111,17 @@ if not defined WSL_DISTRO (
 echo   Distro: !WSL_DISTRO!
 echo [INFO] Distro from registry: !WSL_DISTRO! >> "%LOGFILE%"
 
+REM Validate distro name -- only allow safe chars (letters, digits, dash, dot, underscore)
+REM Prevents command injection if registry contains a malformed value
+echo !WSL_DISTRO!| powershell -NoProfile -Command "$n=$input|Out-String;if($n.Trim()-match'^[a-zA-Z0-9._-]+$'){exit 0}else{exit 1}" >nul 2>&1
+if %errorlevel% neq 0 (
+    echo [ERROR] Distro name contains invalid characters: !WSL_DISTRO!
+    echo [ERROR] Expected: letters, digits, dash, dot, underscore only.
+    echo [ERROR] Invalid distro name >> "%LOGFILE%"
+    pause
+    exit /b 1
+)
+
 REM -- Step 4: Update WSL to 2.5+ and resize --------------------------------
 echo [4/6] Updating WSL and resizing filesystem...
 echo [STEP4] wsl --update and resize >> "%LOGFILE%"
