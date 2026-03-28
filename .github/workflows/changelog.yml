@@ -1,0 +1,136 @@
+name: Auto Changelog
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - CHANGELOG.md
+
+permissions:
+  contents: write
+
+jobs:
+  changelog:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Generate changelog
+        run: |
+          python3 << 'EOF'
+          import subprocess
+          import os
+          from datetime import datetime
+
+          changelog_file = "CHANGELOG.md"
+
+          # Check if CHANGELOG.md exists
+          changelog_exists = os.path.exists(changelog_file)
+
+          if changelog_exists:
+              with open(changelog_file, 'r') as f:
+                  current_content = f.read()
+          else:
+              current_content = ""
+
+          # Get the last time CHANGELOG.md was touched
+          if changelog_exists:
+              result = subprocess.run(
+                  ['git', 'log', '-1', '--format=%aI', '--', changelog_file],
+                  capture_output=True,
+                  text=True
+              )
+              last_changelog_date = result.stdout.strip()
+          else:
+              last_changelog_date = None
+
+          # Get all commits since last CHANGELOG.md update
+          if last_changelog_date:
+              git_cmd = ['git', 'log', f'{last_changelog_date}..HEAD', '--pretty=format:%s']
+          else:
+              git_cmd = ['git', 'log', '--pretty=format:%s']
+
+          result = subprocess.run(git_cmd, capture_output=True, text=True)
+          commits = [c.strip() for c in result.stdout.split('\n') if c.strip()]
+
+          if not commits:
+              print("No new commits to add to changelog")
+              exit(0)
+
+          # Categorize commits
+          categories = {
+              'feat': 'Features',
+              'fix': 'Bug Fixes',
+              'docs': 'Documentation',
+              'chore': 'Chores'
+          }
+
+          categorized = {cat: [] for cat in categories.values()}
+          uncategorized = []
+
+          for commit in commits:
+              found = False
+              for prefix, category in categories.items():
+                  if commit.startswith(f'{prefix}:') or commit.startswith(f'{prefix}('):
+                      # Extract message after prefix and scope
+                      msg = commit.split(':', 1)[1].strip() if ':' in commit else commit
+                      msg = msg.split(')', 1)[1].strip() if ')' in msg else msg
+                      categorized[category].append(msg)
+                      found = True
+                      break
+              if not found and commit:
+                  uncategorized.append(commit)
+
+          # Build changelog entry
+          today = datetime.now().strftime('%Y-%m-%d')
+          changelog_entry = f"## [Unreleased]\n\n"
+
+          for category in ['Features', 'Bug Fixes', 'Documentation', 'Chores']:
+              items = categorized[category]
+              if items:
+                  changelog_entry += f"### {category}\n\n"
+                  for item in items:
+                      changelog_entry += f"- {item}\n"
+                  changelog_entry += "\n"
+
+          if uncategorized:
+              changelog_entry += "### Other\n\n"
+              for item in uncategorized:
+                  changelog_entry += f"- {item}\n"
+              changelog_entry += "\n"
+
+          # Prepend to existing changelog
+          new_content = changelog_entry
+          if current_content:
+              new_content += current_content
+          else:
+              # Add header if new file
+              new_content = "# Changelog\n\nAll notable changes to this project will be documented in this file.\n\nThe format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).\n\n" + new_content
+
+          # Write new changelog
+          with open(changelog_file, 'w') as f:
+              f.write(new_content)
+
+          print(f"Changelog updated with {len(commits)} new commits")
+          EOF
+
+      - name: Commit changelog
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet CHANGELOG.md; then
+              echo "No changes to commit"
+          else
+              git add CHANGELOG.md
+              git commit -m "docs: update CHANGELOG [skip ci]"
+              git push
+          fi

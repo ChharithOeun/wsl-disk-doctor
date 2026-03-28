@@ -1,6 +1,6 @@
 # wsl-disk-doctor
 
-**Fix "No space left on device" errors in WSL2 — then bootstrap Python/ML in 2 steps.**
+**Fix "No space left on device" errors in WSL2 -- then bootstrap Python/ML in 2 steps.**
 
 Most WSL2 disk tools only shrink virtual disks. This one expands them when you're stuck mid-install, cleans up the broken state, and gets you running with minimal footprint.
 
@@ -17,13 +17,27 @@ ERROR: python3-3.12.12-r0: failed to extract usr/lib/libpython3.12.so.1.0: No sp
 ERROR: System state may be inconsistent: failed to write database: No space left on device
 ```
 
-Now your distro is in a broken half-installed state. The existing tools (wslcompact, compact-wsl2-disk) only shrink disks — they can't help you here.
+Now your distro is in a broken half-installed state. The existing tools (wslcompact, compact-wsl2-disk) only shrink disks -- they can't help you here.
 
 ---
 
-## The Fix (2 steps)
 
-### Step 1 — Expand the virtual disk (Windows, run as Admin)
+## One-Click Automatic Fix (Recommended)
+
+Double-click `FIX-WSL-DISK.bat`. That is all.
+
+It will:
+1. Ask Windows for Administrator permission (click Yes)
+2. Expand your WSL2 disk automatically
+3. Install Python 3 + JAX inside WSL2
+4. Verify everything works
+5. Save a log to `fix-wsl-disk.log` so you can see exactly what happened
+
+---
+
+## Manual Fix (2 steps, if you prefer)
+
+### Step 1 -- Expand the virtual disk (Windows, run as Admin)
 
 ```powershell
 # Right-click -> Run as Administrator
@@ -36,17 +50,17 @@ This script:
 - Expands to your target size using `Resize-VHD` (Hyper-V) or `diskpart` as fallback
 - Resizes the Linux filesystem to claim the new space (`resize2fs`)
 
-### Step 2 — Bootstrap Python + JAX (inside WSL2)
+### Step 2 -- Bootstrap Python + JAX (inside WSL2)
 
 ```sh
 sh /path/to/wsl-bootstrap.sh
 ```
 
 This script:
-- **Checks disk space first** — exits with clear instructions if still too full
+- **Checks disk space first** -- exits with clear instructions if still too full
 - **Cleans broken partial installs** (`apk cache clean`, `apk fix`) before retrying
-- **Installs only what's needed**: `python3 + pip` — no gcc, no g++, no git (~80MB vs ~400MB)
-- **JAX ships pre-built wheels** — no compiler required
+- **Installs only what's needed**: `python3 + pip` -- no gcc, no g++, no git (~80MB vs ~400MB)
+- **JAX ships pre-built wheels** -- no compiler required
 - Sets AMD GPU env vars automatically (RX 5700 XT / gfx1010 / ROCm)
 - Runs a CPU math verification benchmark to confirm everything works
 
@@ -91,4 +105,4 @@ WSL2 disk full, no space left on device WSL2, WSL2 VHDX expand, WSL2 Alpine apk 
 
 ## License
 
-MIT — see [LICENSE](LICENSE)
+MIT -- see [LICENSE](LICENSE)

@@ -166,7 +166,7 @@ Write-Host "[4/5] Expanding VHDX to $TargetGB GB..." -ForegroundColor Yellow
 $targetBytes = [int64]$TargetGB * 1GB
 $targetMB = [int64]$TargetGB * 1024
 
-# Try Optimize-VHD (Hyper-V module) first — cleanest method
+# Try Optimize-VHD (Hyper-V module) first -- cleanest method
 $hvAvailable = Get-Command -Name Resize-VHD -ErrorAction SilentlyContinue
 if ($hvAvailable) {
     Write-Host "      Using Hyper-V Resize-VHD..."
