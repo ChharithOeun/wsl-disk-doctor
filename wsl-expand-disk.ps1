@@ -17,7 +17,7 @@
 
 param(
     [string]$DistroName = "",
-    [int]$TargetGB      = 20,
+    [int]$TargetGB      = 50,
     [switch]$Auto
 )
 
@@ -75,6 +75,8 @@ $allDistros = Get-ChildItem $lxssKey -ErrorAction SilentlyContinue | ForEach-Obj
     $name  = $props.DistributionName
     $base  = $props.BasePath
     $guid  = $_.PSChildName
+    # Strip Windows extended-length path prefix (\\?\) -- Join-Path chokes on it
+    if ($base) { $base = $base -replace '^\\\\\?\\', '' }
     if ($name -and $base) {
         $vhdx    = Join-Path $base "ext4.vhdx"
         $vhdxExists = Test-Path $vhdx

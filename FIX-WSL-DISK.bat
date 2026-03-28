@@ -123,8 +123,10 @@ wsl --shutdown
 timeout /t 3 /nobreak >nul
 
 REM Try wsl --manage (WSL 2.5+, handles VHDX + filesystem from Windows)
-echo   Trying: wsl --manage "!WSL_DISTRO!" --resize 20480
-wsl --manage "!WSL_DISTRO!" --resize 20480 2>&1
+REM Target 51200 MB (50 GB) -- must be LARGER than current VHDX virtual size.
+REM If the distro VHDX virtual disk is already >50 GB, bump this higher.
+echo   Trying: wsl --manage "!WSL_DISTRO!" --resize 51200
+wsl --manage "!WSL_DISTRO!" --resize 51200 2>&1
 set MANAGE_ERR=%errorlevel%
 echo [INFO] wsl --manage exit: %MANAGE_ERR% >> "%LOGFILE%"
 
@@ -149,7 +151,7 @@ if not exist "!PS1_PATH!" (
 )
 
 echo   Running wsl-expand-disk.ps1...
-powershell -ExecutionPolicy Bypass -File "!PS1_PATH!" -TargetGB 20 -Auto
+powershell -ExecutionPolicy Bypass -File "!PS1_PATH!" -TargetGB 50 -Auto
 echo [INFO] wsl-expand-disk.ps1 exit: %errorlevel% >> "%LOGFILE%"
 
 :verify_space
@@ -176,7 +178,7 @@ if !FS_FREE_MB2! LSS 200 (
     echo     df -h /
     echo.
     echo   OR run with a larger target:
-    echo     powershell -File wsl-expand-disk.ps1 -TargetGB 40 -Auto
+    echo     powershell -File wsl-expand-disk.ps1 -TargetGB 80 -Auto
     echo [ERROR] Still low after resize >> "%LOGFILE%"
     pause
     exit /b 1

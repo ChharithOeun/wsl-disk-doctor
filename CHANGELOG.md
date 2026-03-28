@@ -6,6 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-03-27
+
+### Fixed
+
+- wsl-expand-disk.ps1: Strip \\?\ prefix from BasePath before calling Join-Path.
+  Windows registry stores BasePath as \\?\C:\Users\... (extended-length path prefix).
+  PowerShell Join-Path parses this with a null drive component and throws
+  "Cannot process argument because the value of argument drive is null".
+  Fix: $base -replace '^\\\\\?\\ applied before any path construction.
+- FIX-WSL-DISK.bat + wsl-expand-disk.ps1: Resize target changed from 20 GB to 50 GB.
+  wsl --manage --resize with a target SMALLER than current VHDX virtual disk size
+  triggers resize2fs "New size smaller than minimum" and exits E_FAIL.
+  Ubuntu-22.04 VHDX virtual disk was already >20 GB so 20 GB was a shrink not a grow.
+  50 GB is a safe default grow target for most single-user WSL2 setups.
+- wsl-expand-disk.ps1: Default TargetGB changed from 20 to 50.
+
+### Root Cause Documented
+
+BasePath in HKCU registry is stored with the Windows extended-length path prefix \\?\.
+PowerShell Join-Path splits the path into drive + rest, and treats \\?\ as a UNC server
+with null drive, causing ArgumentNull exceptions. Must strip \\?\ before using the value
+in any path API.
+
 ## [1.3.0] - 2026-03-27
 
 ### Fixed
@@ -90,6 +113,7 @@ without needing any tools inside the Linux distro.
 - auto-detects Alpine/Ubuntu/Fedora/Arch package manager
 - AMD GPU env vars (HSA_OVERRIDE_GFX_VERSION=10.3.0) for RX 5700 XT
 
+[1.4.0]: https://github.com/ChharithOeun/wsl-disk-doctor/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/ChharithOeun/wsl-disk-doctor/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/ChharithOeun/wsl-disk-doctor/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/ChharithOeun/wsl-disk-doctor/compare/v1.0.0...v1.1.0
