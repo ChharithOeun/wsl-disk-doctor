@@ -6,6 +6,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-03-27
+
+### Fixed
+
+- FIX-WSL-DISK.bat: Distro name now read from Windows registry instead of `wsl --list --quiet`.
+  `wsl --list --quiet` outputs UTF-16LE; cmd.exe `for /f` reads only the first byte ("d"),
+  causing `wsl --manage "d" --resize` to fail with "no distribution with that name".
+  Fix: PowerShell registry query reads `DistributionName` from
+  `HKCU:\Software\Microsoft\Windows\CurrentVersion\Lxss\{DefaultDistribution}`.
+- FIX-WSL-DISK.bat: Filters docker-* distros from resize candidates.
+  Docker Desktop registers `docker-desktop` and `docker-desktop-data` in the WSL2 registry.
+  These cannot be resized with `wsl --manage` (Docker Desktop manages them internally).
+- FIX-WSL-DISK.bat: Adds `wsl --update` step before `wsl --manage --resize`.
+  `wsl --manage --resize` requires WSL 2.5+. Without updating first, the command silently
+  fails on older WSL installs even on Windows 11.
+- FIX-WSL-DISK.bat: Step count corrected to 6 (was 5) after adding WSL update step.
+- FIX-WSL-DISK.bat: All WSL2 shell commands use `sh` not `bash` (Alpine ships sh, not bash).
+
+### Root Cause Documented
+
+`wsl --list --quiet` emits UTF-16LE with BOM. When cmd.exe `for /f` reads this output,
+it interprets the first two bytes (BOM + "B") as "d" (first byte of "docker-desktop").
+The result: `wsl --manage "d" --resize 20480` always fails regardless of actual distro name.
+Registry-based lookup is the only reliable cross-machine solution.
+
 ## [1.2.0] - 2026-03-27
 
 ### Fixed
@@ -65,6 +90,7 @@ without needing any tools inside the Linux distro.
 - auto-detects Alpine/Ubuntu/Fedora/Arch package manager
 - AMD GPU env vars (HSA_OVERRIDE_GFX_VERSION=10.3.0) for RX 5700 XT
 
+[1.3.0]: https://github.com/ChharithOeun/wsl-disk-doctor/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/ChharithOeun/wsl-disk-doctor/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/ChharithOeun/wsl-disk-doctor/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/ChharithOeun/wsl-disk-doctor/releases/tag/v1.0.0

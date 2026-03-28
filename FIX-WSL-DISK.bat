@@ -5,9 +5,12 @@ REM
 REM  WHAT THIS DOES:
 REM    1. Elevates to Administrator automatically (UAC prompt)
 REM    2. Installs WSL2 if not present (with restart prompt)
-REM    3. Runs resize2fs via wsl --manage (no Linux tools needed)
-REM    4. Installs Python + JAX inside WSL2 via wsl-bootstrap.sh
-REM    5. Verifies everything works
+REM    3. Gets distro name from Windows registry (avoids UTF-16 encoding bug)
+REM    4. Updates WSL to 2.5+ so wsl --manage is available
+REM    5. Resizes disk via wsl --manage (handles VHDX + filesystem together)
+REM    6. Falls back to wsl-expand-disk.ps1 if wsl --manage unavailable
+REM    7. Installs Python + JAX inside WSL2 via wsl-bootstrap.sh
+REM    8. Verifies everything works
 REM
 REM  HOW TO USE:
 REM    Double-click this file. Click Yes on the UAC prompt.
@@ -34,7 +37,7 @@ echo.
 echo [OK] Administrator >> "%LOGFILE%"
 
 REM -- Step 1: Install WSL2 if not present ----------------------------------
-echo [1/5] Checking WSL2 installation...
+echo [1/6] Checking WSL2 installation...
 echo [STEP1] Checking WSL2 >> "%LOGFILE%"
 
 where wsl >nul 2>&1
@@ -70,7 +73,7 @@ if %errorlevel% neq 0 (
 echo [OK] WSL2 found. >> "%LOGFILE%"
 
 REM -- Step 2: Check current disk state -------------------------------------
-echo [2/5] Checking WSL2 filesystem...
+echo [2/6] Checking WSL2 filesystem...
 echo [STEP2] Checking disk >> "%LOGFILE%"
 
 wsl -- df -h / 2>nul
@@ -89,27 +92,35 @@ if %FS_FREE_MB% GEQ 500 (
     goto :bootstrap
 )
 
-REM -- Step 3: Resize using wsl --manage (best method, no Linux tools needed) -
-echo [3/5] Resizing WSL2 filesystem...
-echo [STEP3] Resizing >> "%LOGFILE%"
+REM -- Step 3: Get distro name from registry (avoids UTF-16LE encoding bug) -
+echo [3/6] Getting distro name from Windows registry...
+echo [STEP3] Registry distro lookup >> "%LOGFILE%"
 
-REM Get distro name
-for /f %%D in ('wsl --list --quiet 2^>nul') do (
-    if not defined WSL_DISTRO (
-        REM Strip BOM/non-printable chars that wsl --list emits on older Windows
-        set "RAW_NAME=%%D"
-        set WSL_DISTRO=%%D
-    )
-)
+REM PowerShell reads DistributionName + BasePath from HKCU Lxss registry key
+REM Filters out docker-* distros (Docker Desktop manages its own, cannot resize)
+REM Uses DefaultDistribution GUID to prefer the default distro
+
+for /f "delims=" %%D in ('powershell -NoProfile -Command "$k=\"HKCU:\Software\Microsoft\Windows\CurrentVersion\Lxss\"; $defaultGuid=(Get-ItemProperty $k -ErrorAction SilentlyContinue).DefaultDistribution; $distros=Get-ChildItem $k -ErrorAction SilentlyContinue | ForEach-Object { $p=Get-ItemProperty $_.PSPath -ErrorAction SilentlyContinue; if($p.DistributionName -and $p.DistributionName -notlike \"docker-*\"){[PSCustomObject]@{Name=$p.DistributionName;IsDefault=($_.PSChildName -eq $defaultGuid)}} }; $sel=$distros|Where-Object{$_.IsDefault}|Select-Object -First 1; if(-not $sel){$sel=$distros|Select-Object -First 1}; if($sel){$sel.Name}" 2^>nul') do set WSL_DISTRO=%%D
 
 if not defined WSL_DISTRO (
-    echo [WARN] Could not detect distro name. Using wsl-expand-disk.ps1 fallback...
-    echo [WARN] Distro name not detected >> "%LOGFILE%"
+    echo [WARN] Could not detect distro name from registry. Falling back to wsl-expand-disk.ps1...
+    echo [WARN] Registry distro lookup failed >> "%LOGFILE%"
     goto :ps1_fallback
 )
 
 echo   Distro: !WSL_DISTRO!
-echo [INFO] Distro: !WSL_DISTRO! >> "%LOGFILE%"
+echo [INFO] Distro from registry: !WSL_DISTRO! >> "%LOGFILE%"
+
+REM -- Step 4: Update WSL to 2.5+ and resize --------------------------------
+echo [4/6] Updating WSL and resizing filesystem...
+echo [STEP4] wsl --update and resize >> "%LOGFILE%"
+
+echo   Updating WSL (ensures wsl --manage is available)...
+wsl --update 2>&1
+echo [INFO] wsl --update done >> "%LOGFILE%"
+
+wsl --shutdown
+timeout /t 3 /nobreak >nul
 
 REM Try wsl --manage (WSL 2.5+, handles VHDX + filesystem from Windows)
 echo   Trying: wsl --manage "!WSL_DISTRO!" --resize 20480
@@ -123,7 +134,7 @@ if %MANAGE_ERR% equ 0 (
     goto :verify_space
 )
 
-echo   [WARN] wsl --manage not available on this version. Falling back...
+echo   [WARN] wsl --manage failed (exit %MANAGE_ERR%). Falling back to ps1...
 echo [WARN] wsl --manage failed, trying ps1 >> "%LOGFILE%"
 
 :ps1_fallback
@@ -147,13 +158,14 @@ echo.
 echo   Waiting 3 seconds for WSL2 to restart...
 timeout /t 3 /nobreak >nul
 
+wsl -- df -h / 2>nul
+echo.
+
 for /f "tokens=4" %%F in ('wsl -- sh -c "df / 2>/dev/null | tail -1" 2^>nul') do set FS_FREE_KB2=%%F
 if not defined FS_FREE_KB2 set FS_FREE_KB2=0
 set /a FS_FREE_MB2=%FS_FREE_KB2% / 1024
 echo   Free space now: !FS_FREE_MB2! MB
 echo [INFO] Free after resize: !FS_FREE_MB2! MB >> "%LOGFILE%"
-wsl -- df -h / 2>nul
-echo.
 
 if !FS_FREE_MB2! LSS 200 (
     echo [ERROR] Still too little free space after resize ^(!FS_FREE_MB2! MB^).
@@ -171,11 +183,11 @@ if !FS_FREE_MB2! LSS 200 (
 )
 
 :bootstrap
-REM -- Step 4: Run bootstrap inside WSL2 ------------------------------------
-echo [4/5] Installing Python + JAX inside WSL2...
+REM -- Step 5: Run bootstrap inside WSL2 ------------------------------------
+echo [5/6] Installing Python + JAX inside WSL2...
 echo       (2-5 minutes -- do not close this window)
 echo.
-echo [STEP4] Bootstrap >> "%LOGFILE%"
+echo [STEP5] Bootstrap >> "%LOGFILE%"
 
 set SH_PATH=%~dp0wsl-bootstrap.sh
 if not exist "%SH_PATH%" (
@@ -190,7 +202,7 @@ echo [INFO] Bootstrap: !WSL_SH! >> "%LOGFILE%"
 
 wsl -- sh "!WSL_SH!" 2>&1
 set BOOT_ERR=%errorlevel%
-echo [STEP4] exit: %BOOT_ERR% >> "%LOGFILE%"
+echo [STEP5] exit: %BOOT_ERR% >> "%LOGFILE%"
 
 if %BOOT_ERR% neq 0 (
     echo.
@@ -203,11 +215,11 @@ if %BOOT_ERR% neq 0 (
 )
 echo [OK] Bootstrap complete. >> "%LOGFILE%"
 
-REM -- Step 5: Verify -------------------------------------------------------
+REM -- Step 6: Verify -------------------------------------------------------
 echo.
-echo [5/5] Verifying Python + JAX...
+echo [6/6] Verifying Python + JAX...
 echo.
-echo [STEP5] Verifying >> "%LOGFILE%"
+echo [STEP6] Verifying >> "%LOGFILE%"
 
 wsl -- python3 --version 2>nul
 if %errorlevel% neq 0 (
