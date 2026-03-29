@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/banner.png" alt="WSL Disk Doctor Banner" width="100%"></p>
+
 # wsl-disk-doctor
 
 **Fix "No space left on device" errors in WSL2 -- then bootstrap Python/ML in 2 steps.**
